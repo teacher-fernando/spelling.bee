@@ -781,7 +781,7 @@ function renderNav(){
   n.innerHTML=items.map(([id,ic,lab])=>`<button type="button" class="${currentScreen===id?'active':''}" data-nav-screen="${id}" aria-label="${lab}"><span class="nav-icon">${ic}</span><span>${lab}</span></button>`).join('');
   n.querySelectorAll('[data-nav-screen]').forEach(btn=>btn.addEventListener('click',()=>go(btn.dataset.navScreen)));
 }
-function go(screen){stopTimer();stopBeeMusic();if(window.__beeCountdownTimer){clearInterval(window.__beeCountdownTimer);window.__beeCountdownTimer=null}currentScreen=screen;activeActivity=null;document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));const el=document.getElementById('screen-'+screen);if(el)el.classList.add('active');else renderScreen(screen);renderNav();window.scrollTo({top:0,behavior:'smooth'})}
+function go(screen){stopTimer();stopBeeMusic();if(window.__beeCountdownTimer){clearInterval(window.__beeCountdownTimer);window.__beeCountdownTimer=null}currentScreen=screen;activeActivity=null;document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));const el=document.getElementById('screen-'+screen);if(el)el.classList.add('active');else renderScreen(screen);renderNav();window.scrollTo({top:0,behavior:'smooth'});if(window.syncAuraMusic)window.syncAuraMusic()}
 function renderScreen(screen){const app=document.getElementById('app');app.innerHTML='';const s=document.createElement('div');s.id='screen-'+screen;s.className='screen active';s.innerHTML=screenHTML(screen);app.appendChild(s);renderNav()}
 function screenHTML(screen){if(screen==='home')return homeHTML();if(screen==='practice')return practiceHTML();if(screen==='wordlist')return wordListPageHTML();if(screen==='profile'||screen==='progress')return progressHTML();if(screen==='bee')return beeLauncherHTML();return ''}
 function homeHTML(){initDaily();const acc=overallAccuracy(),smart=smartCount(),saved=state.savedSessions||{};const goals=state.daily.goals||[];const mastered=WORDS.filter(w=>statsFor(w.word).masteryLevel==='MASTERED').length;const unlocked=state.unlocked||[];const savedCards=['spell','unscramble','write-spell'].filter(m=>saved[m]).map(m=>{const s=saved[m];const title=m==='spell'?'TYPE IT!':m==='unscramble'?'UNSCRAMBLE':'REVERSE MODE';return `<div class="continue-card card"><div><div class="eyebrow">▶ CONTINUE PRACTICE</div><h3 style="margin:5px 0">${title}</h3><p class="muted small">Word ${s.index+1} of ${s.words.length}</p></div><button class="btn btn-yellow" onclick="resumeGameSession('${m}')">CONTINUE</button></div>`}).join('') + (saved.bee?`<div class="continue-card card"><div><div class="eyebrow">▶ CONTINUE PRACTICE</div><h3 style="margin:5px 0">TIME MODE</h3><p class="muted small">Word ${(saved.bee.index||0)+1} of ${(saved.bee.words||[]).length}</p></div><button class="btn btn-yellow" onclick="resumeTimeModeSession()">CONTINUE</button></div>`:'');let context=savedCards?`<section class="section"><div class="section-head"><div><div class="eyebrow">SAVED PRACTICE</div><h2>Continue where you left off</h2></div></div><div style="display:grid;gap:10px">${savedCards}</div></section>`:'';return `<main class="shell home-compact"><section class="hero card"><div class="hero-row"><div class="hero-copy"><div class="eyebrow">YOUR DAILY TRAINING</div><h1>Hi, Speller! 👋</h1><p class="muted">Ready to improve your spelling?</p></div><div class="mascot" aria-label="Bee mascot">🐝</div></div></section><section class="card prep"><div class="prep-top"><div><div class="eyebrow">⏱️ TIME MODE</div><h3 style="margin-top:3px">Your preparation</h3><p class="muted small">${mastered} of 90 words mastered.</p></div><div class="prep-value">${readiness()}% MASTERED</div></div><div class="progress"><span style="width:${readiness()}%"></span></div><div class="mini-row"><span>${mastered} / 90 mastered</span><span>${state.wordsPracticed.size} practiced</span></div></section>${context}<section class="section"><div class="section-head"><div><div class="eyebrow">SMART REVIEW</div><h2>Words that need attention</h2></div></div><div class="card smart-card"><div class="smart-flex"><div class="smart-icon">🎯</div><div style="flex:1"><h3>${smart?smart+' words ready to review':'Smart Review is locked'}</h3><p class="muted small" style="margin-top:4px">${smart?'Practice the words that need the most attention.':'Practice some words first. Smart Review will unlock when there are words to revisit.'}</p></div>${smart?`<button class="btn btn-primary btn-small" onclick="startActivity('smart')">START REVIEW</button>`:''}</div></div></section><section class="section"><div class="section-head"><div><div class="eyebrow">OVERVIEW</div><h2>Your stats</h2></div></div><div class="stats-grid">${[['Words Practiced',state.wordsPracticed.size],['Mastered',mastered],['Accuracy',acc+'%'],['Current Streak','🔥 '+state.dailyStreak],['Best Streak',state.bestStreak]].map(x=>`<div class="card stat"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('')}</div></section><section class="section"><div class="section-head"><div><div class="eyebrow">ACHIEVEMENTS</div><h2>Your badges</h2></div></div><div class="achievement-grid">${ACHIEVEMENTS.slice(0,3).map(a=>{const u=unlocked.includes(a.id);return `<div class="card achievement ${u?'':'locked'}"><div class="badge">${u?a.icon:'🔒'}</div><div class="achievement-title">${a.title}</div><p>${a.desc}</p></div>`}).join('')}</div><p class="muted small" style="margin-top:9px">${unlocked.length} of ${ACHIEVEMENTS.length} unlocked</p></section><section class="section"><div class="section-head"><div><div class="eyebrow">TODAY'S GOALS</div><h2>Small wins, every day</h2></div></div><div class="goals">${goals.map(g=>`<div class="goal ${g.value>=g.target?'done':''}"><div class="check">${g.value>=g.target?'✓':''}</div><div class="goal-text">${g.label}</div><div class="goal-count">${g.value} / ${g.target}</div></div>`).join('')}</div></section></main>`}
@@ -951,131 +951,95 @@ boot();
 
 <script id="aura-music-controller">
 (function(){
-  const AURA_FADE_IN_MS=900;
-  const AURA_FADE_OUT_MS=750;
-  const AURA_VOLUME=0.42;
-  let auraAudio=null;
-  let auraFadeTimer=null;
-  let auraContext=null;
-  let auraGain=null;
-  let auraSource=null;
-  let auraPlaying=false;
+  const FADE_IN_MS=900;
+  const FADE_OUT_MS=750;
+  const MAX_VOLUME=0.42;
+  let audio=null;
+  let timer=null;
+  let playing=false;
 
-  function getAuraAudio(){
-    if(!auraAudio)auraAudio=document.getElementById('auraMusic');
-    return auraAudio;
-  }
-  function clearAuraFade(){
-    if(auraFadeTimer){clearInterval(auraFadeTimer);auraFadeTimer=null;}
-  }
-  function setupAuraAudio(){
-    const audio=getAuraAudio();
-    if(!audio)return null;
-    if(!auraContext && window.AudioContext){
-      try{
-        auraContext=new AudioContext();
-        auraSource=auraContext.createMediaElementSource(audio);
-        auraGain=auraContext.createGain();
-        auraSource.connect(auraGain);
-        auraGain.connect(auraContext.destination);
-        auraGain.gain.value=0;
-      }catch(e){
-        auraContext=null;auraGain=null;auraSource=null;
-      }
-    }
-    audio.loop=true;
-    audio.volume=AURA_VOLUME;
+  function get(){
+    if(!audio)audio=document.getElementById('auraMusic');
     return audio;
   }
-  function setAuraGain(v){
-    const audio=getAuraAudio();
-    if(auraGain){
-      const now=auraContext.currentTime;
-      auraGain.gain.cancelScheduledValues(now);
-      auraGain.gain.setValueAtTime(Math.max(0,Math.min(1,v)),now);
-    }else if(audio){
-      audio.volume=AURA_VOLUME*Math.max(0,Math.min(1,v));
-    }
+  function stopTimer(){
+    if(timer){clearInterval(timer);timer=null;}
   }
-  function fadeAuraIn(){
-    const audio=setupAuraAudio();
-    if(!audio)return;
-    clearAuraFade();
-    if(auraContext && auraContext.state==='suspended')auraContext.resume().catch(()=>{});
-    try{
-      if(auraGain){
-        const now=auraContext.currentTime;
-        auraGain.gain.cancelScheduledValues(now);
-        auraGain.gain.setValueAtTime(0,now);
-        auraGain.gain.linearRampToValueAtTime(1,now+AURA_FADE_IN_MS/1000);
-      }else audio.volume=0;
-      const p=audio.play();
-      if(p&&p.catch)p.catch(()=>{});
-    }catch(e){}
-    if(!auraGain){
-      const start=performance.now();
-      auraFadeTimer=setInterval(()=>{
-        const elapsed=performance.now()-start;
-        const t=Math.min(1,elapsed/AURA_FADE_IN_MS);
-        audio.volume=AURA_VOLUME*t;
-        if(t>=1)clearAuraFade();
-      },40);
-    }
-    auraPlaying=true;
-  }
-  function fadeAuraOut(){
-    const audio=getAuraAudio();
-    if(!audio)return;
-    clearAuraFade();
-    if(audio.paused){auraPlaying=false;return;}
-    const startVol=auraGain?1:(audio.volume/AURA_VOLUME);
-    if(auraGain){
-      const now=auraContext.currentTime;
-      auraGain.gain.cancelScheduledValues(now);
-      auraGain.gain.setValueAtTime(Math.max(0,Math.min(1,startVol)),now);
-      auraGain.gain.linearRampToValueAtTime(0,now+AURA_FADE_OUT_MS/1000);
-      setTimeout(()=>{
-        if(!isAuraProfile()){
-          try{audio.pause();audio.currentTime=0;}catch(e){}
-          auraPlaying=false;
-          setAuraGain(0);
-        }
-      },AURA_FADE_OUT_MS+40);
-    }else{
-      const start=performance.now();
-      auraFadeTimer=setInterval(()=>{
-        const t=Math.min(1,(performance.now()-start)/AURA_FADE_OUT_MS);
-        audio.volume=AURA_VOLUME*(1-t)*startVol;
-        if(t>=1){
-          clearAuraFade();
-          try{audio.pause();audio.currentTime=0;}catch(e){}
-          auraPlaying=false;
-        }
-      },35);
-    }
-  }
-  function isAuraProfile(){
+  function isMaxProfile(){
     return typeof currentScreen!=='undefined' &&
-      currentScreen==='progress' &&
+      (currentScreen==='profile'||currentScreen==='progress') &&
       typeof levelInfo==='function' &&
       levelInfo().isMaxLevel===true;
   }
-  function syncAuraMusic(){
-    const audio=getAuraAudio();
-    if(isAuraProfile()){
-      if(!auraPlaying || !audio || audio.paused)fadeAuraIn();
-    }else if(auraPlaying)fadeAuraOut();
+  function fadeIn(){
+    const a=get();
+    if(!a)return;
+    stopTimer();
+    a.loop=true;
+    a.muted=false;
+    a.volume=0;
+    try{a.load();}catch(e){}
+    let p;
+    try{p=a.play();}catch(e){p=null;}
+    if(p&&p.catch)p.catch(function(){
+      stopTimer();
+      playing=false;
+    });
+    const start=performance.now();
+    timer=setInterval(function(){
+      const t=Math.min(1,(performance.now()-start)/FADE_IN_MS);
+      a.volume=MAX_VOLUME*t;
+      if(t>=1)stopTimer();
+    },30);
+    playing=true;
   }
-  window.syncAuraMusic=syncAuraMusic;
-  window.stopAuraMusic=fadeAuraOut;
+  function fadeOut(){
+    const a=get();
+    if(!a)return;
+    stopTimer();
+    if(a.paused){
+      playing=false;
+      try{a.currentTime=0;a.volume=MAX_VOLUME;}catch(e){}
+      return;
+    }
+    const startVol=Math.max(0,Math.min(1,a.volume/MAX_VOLUME));
+    const start=performance.now();
+    timer=setInterval(function(){
+      const t=Math.min(1,(performance.now()-start)/FADE_OUT_MS);
+      a.volume=MAX_VOLUME*startVol*(1-t);
+      if(t>=1){
+        stopTimer();
+        try{a.pause();a.currentTime=0;a.volume=MAX_VOLUME;}catch(e){}
+        playing=false;
+      }
+    },30);
+  }
+  function sync(){
+    const a=get();
+    if(isMaxProfile()){
+      if(!playing || !a || a.paused)fadeIn();
+    }else if(playing){
+      fadeOut();
+    }
+  }
+
+  window.syncAuraMusic=sync;
+  window.stopAuraMusic=fadeOut;
+
   window.addEventListener('pointerdown',function(){
-    if(isAuraProfile())syncAuraMusic();
+    if(isMaxProfile())sync();
   },{passive:true});
+
   document.addEventListener('visibilitychange',function(){
-    if(document.hidden)fadeAuraOut();
+    if(document.hidden)fadeOut();
   });
-  window.addEventListener('beforeunload',function(){try{const a=getAuraAudio();if(a)a.pause();}catch(e){}});
-  setTimeout(syncAuraMusic,0);
+
+  window.addEventListener('beforeunload',function(){
+    try{const a=get();if(a)a.pause();}catch(e){}
+  });
+
+  setInterval(sync,500);
+  setTimeout(sync,0);
 })();
 </script>
 
