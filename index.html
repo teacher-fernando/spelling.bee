@@ -346,6 +346,66 @@
 .unscramble-tile:active{z-index:20;transform:rotate(var(--rot)) scale(1.08)}
 @media (max-width:380px){.unscramble-tiles{gap:6px;grid-auto-rows:54px;padding-left:4px !important;padding-right:4px !important}.unscramble-tile{width:46px !important;height:50px !important;min-width:46px;min-height:50px}}
 </style>
+
+<style id="mobile-long-word-layout-fix">
+/* Mobile typography: keep long competition words readable instead of sacrificing
+   the word's visual hierarchy to the practice badges. */
+@media (max-width:600px){
+  .word-item{
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    gap:8px;
+    align-items:start;
+  }
+  .word-item-main{width:100%;}
+  .word-item-head{gap:7px;}
+  .word-item-word{
+    font-size:18px;
+    line-height:1.12;
+    letter-spacing:-.015em;
+    overflow-wrap:break-word;
+    word-break:normal;
+    hyphens:auto;
+  }
+  .word-item-audio{width:32px;height:32px;font-size:14px;}
+  .word-mode-badges{
+    width:100%;
+    justify-content:flex-start;
+    gap:7px;
+    margin-top:2px;
+  }
+  .word-mode-badge{width:32px;height:32px;}
+  .word-display .word{
+    font-size:clamp(30px,8.8vw,48px);
+    line-height:1.04;
+    letter-spacing:-.01em;
+    overflow-wrap:break-word;
+    word-break:normal;
+  }
+  .game-word-big{
+    font-size:clamp(28px,8vw,46px);
+    letter-spacing:.08em;
+    line-height:1.08;
+  }
+  .game-memory-word{
+    font-size:clamp(28px,8.5vw,50px);
+    letter-spacing:.045em;
+    line-height:1.08;
+    overflow-wrap:break-word;
+  }
+  .feedback-answer strong{
+    overflow-wrap:anywhere;
+    word-break:normal;
+  }
+}
+@media (max-width:380px){
+  .word-item-word{font-size:17px;}
+  .word-item{padding:13px;}
+  .word-mode-badge{width:31px;height:31px;font-size:13px;}
+  .unscramble-answer{gap:4px;padding:9px 6px;}
+  .unscramble-slot{width:29px;height:42px;font-size:18px;}
+}
+</style>
 </head>
 <body>
 <div id="app" class="app"></div>
@@ -570,7 +630,7 @@ function beeTone(freq,duration,gain,type='sine',when=null){const c=beeAudioConte
 function playBeeCountdownTone(n){const c=beeAudioContext();if(!c)return;const freq=n===3?440:n===2?523.25:659.25;beeTone(freq,.18,.065,'sine');}
 function startBeeMusic(){stopBeeMusic();const c=beeAudioContext();if(!c)return;let step=0;window.__beeMusicNext=c.currentTime+.05;window.__beeMusicTimer=setInterval(()=>{if(!activity||activity.mode!=='bee'){stopBeeMusic();return}const left=Math.max(0,activity.timeLeft||30);const progress=Math.min(1,(30-left)/30);const bpm=48+progress*105;const interval=60000/bpm/2;const now=c.currentTime;if(window.__beeMusicNext<now-.2)window.__beeMusicNext=now+.02;while(window.__beeMusicNext<now+.18){const scale=[220,261.63,329.63,392,329.63,261.63,196];const f=scale[step%scale.length]*(step%4===3?1.5:1);const g=.011+progress*.011;beeTone(f,Math.max(.06,interval/1000*.72),g,progress>.75?'square':'triangle',window.__beeMusicNext);if(progress>.6&&step%2===0)beeTone(f/2,Math.max(.07,interval/1000*.65),g*.65,'sine',window.__beeMusicNext);step++;window.__beeMusicNext+=interval/1000}},45)}
 function showCountdown(cb){const o=document.createElement('div');o.className='countdown';o.innerHTML='<div class="num">3</div>';document.body.appendChild(o);let n=3;startBeeMusic();playBeeCountdownTone(3);const iv=setInterval(()=>{n--;if(n===0){clearInterval(iv);window.__beeCountdownTimer=null;o.remove();cb()}else{o.querySelector('.num').textContent=n;playBeeCountdownTone(n)}},850);window.__beeCountdownTimer=iv}
-function renderBeeRound(){currentScreen='bee-game';renderNav();if(window.__beeRoundAdvanceTimer){clearTimeout(window.__beeRoundAdvanceTimer);window.__beeRoundAdvanceTimer=null}const w=getWord(activity.words[activity.index]);activity.hints=0;activity.timeLeft=30;activity.submitted=false;activity.transitioning=false;activity.wordPlays=0;activity.examplePlayed=false;activity.definitionPlayed=false;document.getElementById('app').innerHTML=`<div class="bee-arena"><div id="beePanicBg" class="bee-panic-bg" aria-hidden="true"></div><div class="bee-shell"><div class="bee-top"><button class="bee-exit" onclick="confirmBeeExit()" aria-label="Leave Bee simulation" title="Leave Bee simulation">←</button><div class="bee-title bee-shake-text">⏱️ TIME MODE</div><div class="bee-round bee-shake-text">${activity.index+1} / ${activity.beeLength||10}</div></div><div class="bee-stats"><div class="bee-stat"><b class="bee-shake-text">${activity.score}</b><span class="bee-shake-text">Score</span></div><div class="bee-stat"><b class="bee-shake-text">🔥 ${activity.streak}</b><span class="bee-shake-text">Streak</span></div><div class="bee-stat"><b id="beeTime" class="bee-shake-text">30</b><span class="bee-shake-text">Time</span></div></div><div class="bee-timer"><span id="beeTimerBar"></span></div><div class="bee-main"><div class="bee-card bee-card-clean"><div class="bee-prompt-row"><div><div class="bee-ask bee-shake-text">💣 Type the Answer</div></div><div class="bee-word-audio-wrap"><button id="beeWordAudio" class="bee-icon-action bee-word-audio" onclick="beePlayWord()" aria-label="Play word" title="Play word">🔊</button><span id="beeWordCount" class="bee-word-count">0 / 3</span></div></div><div class="bee-actions bee-actions-clean"><button id="beeDefinitionBtn" class="bee-icon-action" onclick="beeHint('definition')" aria-label="Hear definition" title="Hear definition">📖</button><button id="beeExampleBtn" class="bee-icon-action" onclick="beeHint('example')" aria-label="Play example" title="Play example once">💬</button></div><div id="beeHintBox"></div><div class="bee-input"><input id="beeInput" class="spell-input" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="Type the spelling…" onkeydown="if(event.key==='Enter')submitBee()" /></div><button class="bee-submit-icon" onclick="submitBee()" aria-label="Check spelling" title="Check spelling">✓</button><div id="beeFeedback"></div></div></div></div></div>`;beePlayWord();startBeeMusic();startBeeTimer();setTimeout(()=>document.getElementById('beeInput')?.focus(),250)}
+function renderBeeRound(){currentScreen='bee-game';renderNav();if(window.__beeRoundAdvanceTimer){clearTimeout(window.__beeRoundAdvanceTimer);window.__beeRoundAdvanceTimer=null}const w=getWord(activity.words[activity.index]);activity.hints=0;activity.timeLeft=30;activity.submitted=false;activity.transitioning=false;activity.wordPlays=0;activity.examplePlayed=false;activity.definitionPlayed=false;document.getElementById('app').innerHTML=`<div class="bee-arena"><div id="beePanicBg" class="bee-panic-bg" aria-hidden="true"></div><div class="bee-shell"><div class="bee-top"><button class="bee-exit" onclick="confirmBeeExit()" aria-label="Leave Bee simulation" title="Leave Bee simulation">←</button><div class="bee-title bee-shake-text">⏱️ TIME MODE</div><div class="bee-round bee-shake-text">${activity.index+1} / ${activity.beeLength||10}</div></div><div class="bee-stats"><div class="bee-stat"><b class="bee-shake-text">${activity.score}</b><span class="bee-shake-text">Score</span></div><div class="bee-stat"><b class="bee-shake-text">🔥 ${activity.streak}</b><span class="bee-shake-text">Streak</span></div><div class="bee-stat"><b id="beeTime" class="bee-shake-text">30</b><span class="bee-shake-text">Time</span></div></div><div class="bee-timer"><span id="beeTimerBar"></span></div><div class="bee-main"><div class="bee-card bee-card-clean"><div class="bee-prompt-row"><div><div class="bee-ask bee-shake-text">⏱️ Type the Answer</div></div><div class="bee-word-audio-wrap"><button id="beeWordAudio" class="bee-icon-action bee-word-audio" onclick="beePlayWord()" aria-label="Play word" title="Play word">🔊</button><span id="beeWordCount" class="bee-word-count">0 / 3</span></div></div><div class="bee-actions bee-actions-clean"><button id="beeDefinitionBtn" class="bee-icon-action" onclick="beeHint('definition')" aria-label="Hear definition" title="Hear definition">📖</button><button id="beeExampleBtn" class="bee-icon-action" onclick="beeHint('example')" aria-label="Play example" title="Play example once">💬</button></div><div id="beeHintBox"></div><div class="bee-input"><input id="beeInput" class="spell-input" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="Type the spelling…" onkeydown="if(event.key==='Enter')submitBee()" /></div><button class="bee-submit-icon" onclick="submitBee()" aria-label="Check spelling" title="Check spelling">✓</button><div id="beeFeedback"></div></div></div></div></div>`;beePlayWord();startBeeMusic();startBeeTimer();setTimeout(()=>document.getElementById('beeInput')?.focus(),250)}
 function beePlayWord(){if(activity.submitted||activity.wordPlays>=3)return;activity.wordPlays++;const w=getWord(activity.words[activity.index]);speakWord(w.word);const b=document.getElementById('beeWordAudio'),c=document.getElementById('beeWordCount');if(b){b.disabled=activity.wordPlays>=3;b.setAttribute('aria-label',activity.wordPlays>=3?'Word playback limit reached':'Play word');b.title=activity.wordPlays>=3?'Word playback limit reached':'Play word'}if(c)c.textContent=activity.wordPlays+' / 3';}
 function updateBeePanic(){const bg=document.getElementById('beePanicBg');if(!bg)return;const left=activity.timeLeft;let count=left<=5?7:left<=10?5:left<=15?3:left<=20?2:0;if(!count)return;const emojis=left<=5?['😰','😱','🤯','💣']:left<=10?['😰','😬','😵‍💫','💣']:left<=15?['😟','😬','💣']:['😅','💭'];for(let i=0;i<count;i++){const e=document.createElement('span');e.className='bee-panic-emoji';e.textContent=emojis[Math.floor(Math.random()*emojis.length)];e.style.left=(8+Math.random()*84)+'%';e.style.top=(8+Math.random()*84)+'%';e.style.setProperty('--rot',(Math.random()*50-25)+'deg');e.style.setProperty('--dur',(1.4+Math.random()*1.4)+'s');bg.appendChild(e);setTimeout(()=>e.remove(),3200)}}
 function startBeeTimer(){stopTimer();timer=setInterval(()=>{activity.timeLeft--;const t=document.getElementById('beeTime'),bar=document.getElementById('beeTimerBar'),arena=document.querySelector('.bee-arena');if(t)t.textContent=activity.timeLeft;if(bar)bar.style.width=(activity.timeLeft/30*100)+'%';if(arena)arena.classList.toggle('bomb-panic',activity.timeLeft<=10);updateBeePanic();if(activity.timeLeft<=10&&activity.timeLeft>0)playSfx('time',activity.timeLeft);if(activity.timeLeft<=0){clearInterval(timer);timer=null;playSfx('timeout');submitBee(true)}},1000)}
