@@ -1,3 +1,4 @@
+```
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -833,7 +834,52 @@ function selectUnscrambleLetter(id){if(!gameState||gameState.locked||gameState.t
 function removeUnscrambleLetter(slotIndex){if(!gameState||gameState.locked||gameState.type!=='unscramble')return;const slots=gameState.placed||[];if(slots[slotIndex]==null)return;slots[slotIndex]=null;gameState.placed=slots;renderGame()}
 function replayUnscrambleWord(){if(!gameState||gameState.type!=='unscramble'||gameState.locked)return;stopGameTimer();if('speechSynthesis'in window)speechSynthesis.cancel();gameState.inputReady=false;gameState.tiles=[];gameState.placed=[];const status=document.getElementById('gameFeedback');if(status)status.innerHTML='';renderGame();const w=currentGameWord();playGameWordAudio(w.word,()=>{if(!gameState||gameState.type!=='unscramble')return;gameState.inputReady=true;prepareUnscramble();renderGame()})}
 function playUnscrambleAudio(){if(!gameState||gameState.type!=='unscramble')return;gameState.inputReady=false;gameState.tiles=[];gameState.placed=[];stopGameTimer();const w=currentGameWord();const status=document.getElementById('gameFeedback');if(status)status.textContent='Listen carefully…';renderGame();playGameWordAudio(w.word,()=>{if(!gameState||gameState.type!=='unscramble')return;gameState.inputReady=true;prepareUnscramble();renderGame()})}
-function playWriteSpellAudio(){if(!gameState||gameState.type!=='write-spell')return;gameState.inputReady=false;stopGameTimer();const w=currentGameWord();const spelling=w.word.split('').map(ch=>ch==='-'?'hyphen':ch).join(', ');const reverseRate=w.difficulty==='easy'?1.45:w.difficulty==='medium'?1.35:1.28;playGameWordAudio(spelling,()=>{if(!gameState||gameState.type!=='write-spell')return;gameState.inputReady=true;renderGame();setTimeout(()=>document.getElementById('gameInput')?.focus(),80)},reverseRate)}
+function playWriteSpellAudio(){
+  if(!gameState||gameState.type!=='write-spell')return;
+  gameState.inputReady=false;stopGameTimer();
+  const w=currentGameWord();
+  const letters=w.word.split('').map(ch=>ch==='-'?'hyphen':ch);
+  playReverseModeSpelling(letters,()=>{
+    if(!gameState||gameState.type!=='write-spell')return;
+    gameState.inputReady=true;renderGame();
+    setTimeout(()=>document.getElementById('gameInput')?.focus(),80);
+  });
+}
+
+// Reverse Mode uses a controlled letter-by-letter playback so mobile TTS engines
+// cannot make the whole spelling dramatically faster just because their speech
+// engine interprets rate=1 differently. Progress/state storage is untouched.
+function playReverseModeSpelling(letters,onEnd){
+  if(!window.speechSynthesis){if(typeof onEnd==='function')setTimeout(onEnd,0);return}
+  try{
+    speechSynthesis.cancel();
+    const voices=speechSynthesis.getVoices();
+    const voice=voices.find(v=>/^en-US$/i.test(v.lang)&&/Google US English|Microsoft.*Online \(Natural\)|Samantha/i.test(v.name))
+      ||voices.find(v=>/^en-US$/i.test(v.lang))
+      ||voices.find(v=>/^en/i.test(v.lang));
+    let i=0,finished=false;
+    const cancelReverse=()=>{finished=true;i=letters.length;speechSynthesis.cancel();};
+    window.__cancelReverseModeAudio=cancelReverse;
+    const finish=()=>{if(finished)return;finished=true;if(window.__cancelReverseModeAudio===cancelReverse)window.__cancelReverseModeAudio=null;if(typeof onEnd==='function')onEnd()};
+    const next=()=>{
+      if(finished)return;
+      if(i>=letters.length){finish();return}
+      const text=letters[i++];
+      const u=new SpeechSynthesisUtterance(text);
+      u.lang='en-US';
+      u.rate=1;
+      u.pitch=.98;
+      u.volume=1;
+      if(voice)u.voice=voice;
+      let ended=false;
+      const advance=()=>{if(ended)return;ended=true;setTimeout(next,160)};
+      u.onend=advance;
+      u.onerror=advance;
+      speechSynthesis.speak(u);
+    };
+    next();
+  }catch(e){if(window.__cancelReverseModeAudio)window.__cancelReverseModeAudio=null;if(typeof onEnd==='function')onEnd()}
+}
 function startWriteSpellClock(){if(!gameState||gameState.type!=='write-spell')return;stopGameTimer();gameState.timeLeft=gameState.maxTime;gameState.clockStarted=true;const t=document.getElementById('gameTimer'),bar=document.getElementById('gameTimerBar');if(t)t.textContent=gameState.timeLeft;if(bar)bar.style.width='100%';startGameTimer()}
 function submitWriteSpell(){if(!gameState||gameState.type!=='write-spell'||gameState.locked||!gameState.inputReady)return;const input=document.getElementById('gameInput');if(!input)return;const w=currentGameWord();const answer=input.value.trim();if(!answer){input.focus();return}if(normalizeSpelling(answer)===normalizeSpelling(w.word))finishWriteSpellWord(true,'complete');else{gameState.locked=true;stopGameTimer();gameState.streak=0;gameState.answers=gameState.answers||[];gameState.answers.push({word:w.word,correct:false});recordAnswer(w,false,{mode:'write-spell',difficulty:w.difficulty,noHint:true});playSfx('wrong');const f=document.getElementById('gameFeedback');if(f)f.innerHTML=`<div class="feedback show wrong"><div class="feedback-title">✕ NOT QUITE!</div><div class="feedback-answer">The correct spelling is <strong>${escapeHTML(w.word)}</strong>.</div><button class="btn btn-primary primary-next" onclick="nextGameWord()">NEXT WORD →</button></div>`;input.classList.add('wrong')}}
 function finishWriteSpellWord(correct,reason){if(!gameState||gameState.locked)return;gameState.locked=true;const w=currentGameWord();if(correct){gameState.correct++;gameState.streak++;gameState.bestStreak=Math.max(gameState.bestStreak,gameState.streak);gameState.score+=20;gameState.answers=gameState.answers||[];gameState.answers.push({word:w.word,correct:true});playSfx('correct');recordAnswer(w,true,{mode:'write-spell',difficulty:gameState.difficulty,noHint:true});setTimeout(()=>advanceGameWord(),550)}else{gameState.streak=0;gameState.answers=gameState.answers||[];gameState.answers.push({word:w.word,correct:false});playSfx('wrong');recordAnswer(w,false,{mode:'write-spell',difficulty:gameState.difficulty,noHint:true});const f=document.getElementById('gameFeedback');if(f)f.innerHTML=`<div class="feedback show wrong"><div class="feedback-title">✕ NOT QUITE!</div><div class="feedback-answer">The correct spelling is <strong>${escapeHTML(w.word)}</strong>.</div><button class="btn btn-primary primary-next" onclick="nextGameWord()">NEXT WORD →</button></div>`}}
@@ -841,7 +887,7 @@ function advanceGameWord(){if(!gameState)return;gameState.index++;gameState.lock
 function nextGameWord(){advanceGameWord()}
 function finishGameWord(correct,reason){if(!gameState||gameState.locked)return;gameState.locked=true;const w=currentGameWord();if(correct){gameState.correct++;gameState.streak++;gameState.bestStreak=Math.max(gameState.bestStreak,gameState.streak);gameState.score+=25;gameState.answers=gameState.answers||[];gameState.answers.push({word:w.word,correct:true});playSfx('correct');recordAnswer(w,true,{mode:'unscramble',difficulty:gameState.difficulty,noHint:true});setTimeout(()=>advanceGameWord(),550)}else{gameState.streak=0;gameState.answers=gameState.answers||[];gameState.answers.push({word:w.word,correct:false});playSfx('wrong');recordAnswer(w,false,{mode:'unscramble',difficulty:gameState.difficulty,noHint:true});const f=document.getElementById('gameFeedback');if(f)f.innerHTML=`<div class="feedback show wrong"><div class="feedback-title">✕ NOT QUITE!</div><div class="feedback-answer">The correct spelling is <strong>${'${escapeHTML(w.word)}'}</strong>.</div><button class="btn btn-primary primary-next" onclick="nextGameWord()">NEXT WORD →</button></div>`}}
 function finishGame(){stopGameTimer();if(window.speechSynthesis)speechSynthesis.cancel();if(!gameState)return;const g=gameState;const sessionDifficulty=Array.isArray(g.difficulties)?(g.difficulties.length===1?g.difficulties[0]:'mixed'):g.difficulty;const sessionAccuracy=Math.round(g.correct/Math.max(1,g.words.length)*100);const sessionDiffs=Array.isArray(g.difficulties)?[...g.difficulties]:[g.difficulty];state.history.unshift({date:today(),mode:gameTitle(g.type),difficulty:sessionDifficulty,difficulties:sessionDiffs,words:g.words.length,correct:g.correct,accuracy:sessionAccuracy,score:g.score,completed:true});state.history=state.history.slice(0,60);updateSessionGoals(g.type,sessionDifficulty);ensureAchievements();saveState();gameState=null;const app=document.getElementById('app');currentScreen='game';app.innerHTML=`<main class="shell game-shell"><div class="game-top"><button class="icon-nav" onclick="go('practice')" aria-label="Back to Practice" title="Back to Practice">←</button><div class="mode-title">${gameTitle(g.type)} RESULTS</div></div><section class="card game-card-play"><div style="font-size:58px">${g.correct===g.words.length?'🏆':'🎮'}</div><div class="eyebrow">${g.correct===g.words.length?'PERFECT RUN!':'NICE RUN!'}</div><div class="game-result-score">${g.score}</div><div class="muted">SCORE</div><div class="stats-grid" style="margin-top:16px"><div class="card stat"><div class="label">Correct</div><div class="value">${g.correct}/${g.words.length}</div></div><div class="card stat"><div class="label">Best Streak</div><div class="value">🔥 ${g.bestStreak}</div></div></div><button class="btn btn-primary btn-full" onclick="startGame('${g.type}')">PLAY AGAIN</button><button class="btn btn-outline btn-full" style="margin-top:9px" onclick="go('practice')">BACK TO PRACTICE</button></section></main>`;renderNav()}
-function saveGameSession(){if(!gameState)return;stopGameTimer();if(window.speechSynthesis)speechSynthesis.cancel();const key=gameState.type;state.savedSessions=state.savedSessions||{};const saveKey=key==='spell'?'spell':key;state.savedSessions[saveKey]={words:[...gameState.words],index:gameState.index,label:gameTitle(gameState.type),mode:gameState.type,difficulty:gameState.difficulty,difficulties:[...(gameState.difficulties||[gameState.difficulty])],length:gameState.length||gameState.words.length,answers:[...(gameState.answers||[])],startedAt:gameState.startedAt||Date.now(),savedAt:Date.now()};saveState();toast('Practice Saved');gameState=null;go('home')}
+function saveGameSession(){if(!gameState)return;stopGameTimer();if(window.__cancelReverseModeAudio)window.__cancelReverseModeAudio();if(window.speechSynthesis)speechSynthesis.cancel();const key=gameState.type;state.savedSessions=state.savedSessions||{};const saveKey=key==='spell'?'spell':key;state.savedSessions[saveKey]={words:[...gameState.words],index:gameState.index,label:gameTitle(gameState.type),mode:gameState.type,difficulty:gameState.difficulty,difficulties:[...(gameState.difficulties||[gameState.difficulty])],length:gameState.length||gameState.words.length,answers:[...(gameState.answers||[])],startedAt:gameState.startedAt||Date.now(),savedAt:Date.now()};saveState();toast('Practice Saved');gameState=null;go('home')}
 function resumeGameSession(type){const saved=(state.savedSessions||{})[type];if(!saved){toast('No saved practice found.');return}const wds=[...(saved.words||[])];if(!wds.length){toast('Saved practice is unavailable.');return}const idx=Math.max(0,Math.min(Number(saved.index)||0,wds.length-1));const diffList=saved.difficulties||[saved.difficulty||getWord(wds[idx])?.difficulty||'easy'];const d=saved.difficulty||diffList[0];const max=gameMaxTime(saved.mode||type,getWord(wds[idx])||{difficulty:d});gameState={type:saved.mode||type,difficulty:d,difficulties:diffList,length:saved.length||wds.length,words:wds,index:idx,score:0,correct:(saved.answers||[]).filter(a=>a.correct).length,streak:0,bestStreak:0,startedAt:saved.startedAt||Date.now(),timeLeft:max,maxTime:max,answer:'',tiles:[],placed:[],locked:false,inputReady:false,clockStarted:false,answers:saved.answers||[]};currentScreen='game';renderGame();if(gameState.type==='spell')playTypeItAudio();else if(gameState.type==='unscramble')playUnscrambleAudio();else playWriteSpellAudio()}
 function clearSavedGame(type){if(state.savedSessions)state.savedSessions[type]=null;saveState()}
 function confirmGameExit(){if(!gameState){go('practice');return}saveGameSession()}
@@ -1041,7 +1087,47 @@ boot();
   setInterval(sync,500);
   setTimeout(sync,0);
 })();
+
+// Desktop keyboard support for Unscramble.
+// Only handles keys when the Unscramble board is active; other game inputs are untouched.
+function handleUnscrambleKeyboard(event){
+  if(!gameState||gameState.type!=='unscramble'||gameState.locked||!gameState.inputReady)return;
+  const target=event.target;
+  if(target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable))return;
+  const key=event.key;
+  const slots=gameState.placed||[];
+  if(/^[a-zA-Z]$/.test(key)){
+    const wanted=key.toLowerCase();
+    const tile=gameState.tiles.find(t=>!slots.includes(t.id)&&String(t.c).toLowerCase()===wanted);
+    if(!tile)return;
+    event.preventDefault();
+    const idx=slots.findIndex(x=>x==null);
+    if(idx<0)return;
+    slots[idx]=tile.id;
+    gameState.placed=slots;
+    renderGame();
+    maybeFinishUnscramble();
+    return;
+  }
+  if(key==='Backspace'){
+    const last=slots.reduce((last,id,i)=>id!=null?i:last,-1);
+    if(last<0)return;
+    event.preventDefault();
+    slots[last]=null;
+    gameState.placed=slots;
+    renderGame();
+    return;
+  }
+  if(key==='Enter'){
+    if(slots.length&&slots.every(id=>id!=null)){
+      event.preventDefault();
+      maybeFinishUnscramble();
+    }
+  }
+}
+document.addEventListener('keydown',handleUnscrambleKeyboard);
 </script>
 
 </body>
 </html>
+```
